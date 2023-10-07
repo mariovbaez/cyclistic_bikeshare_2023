@@ -1,0 +1,193 @@
+---
+title: "Cyclistic Biketrip data 2023"
+author: "Mario"
+date: "`r Sys.Date()`"
+output:
+  html_document: default
+  word_document: default
+---
+
+
+# The dataset is comprised of six comma-separated value (CSV) files that represent the first half of 2023’s bike rides.
+# The purpose of this study is to analyze trip data to develop strategies oriented to membership conversion.
+
+
+## Load libraries into session
+```{r}
+library(tidyverse)
+library(tidyr)
+library(lubridate)
+library(DescTools)
+```
+
+
+## Load and merge the data into a single dataset
+```{r}
+df1 <- read.csv("202301-divvy-tripdata.csv", na.strings=c("","NA"))
+df2 <- read.csv("202302-divvy-tripdata.csv", na.strings=c("","NA"))
+df3 <- read.csv("202303-divvy-tripdata.csv", na.strings=c("","NA"))
+df4 <- read.csv("202304-divvy-tripdata.csv", na.strings=c("","NA"))
+df5 <- read.csv("202305-divvy-tripdata.csv", na.strings=c("","NA"))
+df6 <- read.csv("202306-divvy-tripdata.csv", na.strings=c("","NA"))
+biketrip_df <- rbind(df1, df2, df3, df4, df5, df6)
+tibble(biketrip_df)
+```
+
+
+## Remove observations 
+```{r}
+biketrip_clean <- biketrip_df %>% 
+  drop_na()
+```
+
+
+## Reformat the “started_at” and “ended_at” variables to date-time objects
+```{r}
+biketrip_clean$started_at <- ymd_hms(biketrip_clean$started_at)
+biketrip_clean$ended_at <- ymd_hms(biketrip_clean$ended_at)
+```
+
+
+## Dates
+### Extract the date
+```{r}
+biketrip_clean$start_date <- as.Date(biketrip_clean$started_at)
+```
+
+
+### Extracting day
+```{r}
+biketrip_clean$day <- day(biketrip_clean$started_at)
+```
+
+
+### Extracting month
+```{r}
+biketrip_clean$month <- month(biketrip_clean$started_at)
+```
+
+
+### Extracting year
+```{r}
+biketrip_clean$year <- year(biketrip_clean$started_at)
+```
+
+
+### Calculate day of the week rides began
+```{r}
+biketrip_clean$day_of_week <- weekdays(biketrip_clean$started_at)
+```
+
+
+### Calculate trip duration
+```{r}
+biketrip_clean <- biketrip_clean %>%
+  mutate(ride_length = ended_at - started_at)
+```
+
+
+## Drop negative trip duration
+```{r}
+biketrip_clean <- biketrip_clean %>%   
+	filter(ride_length > 0)
+```
+
+
+## Drop columns that wont be used
+```{r}
+biketrip_clean = subset(biketrip_clean, select = -c(ride_id, start_station_id, end_station_id, start_lat, start_lng, end_lat, end_lng))
+```
+
+
+## Export cleaned df to a new csv
+```{r}
+write_csv(biketrip_clean, "2023-divvy-tripdata_final.csv")
+biketrip_final <- read_csv("2023-divvy-tripdata_final.csv")
+```
+
+
+## Analysis
+
+### Descriptive analysis of main variables
+```{r}
+analysis_df <- biketrip_final %>%
+  group_by(member_casual) %>%
+  summarize(
+    mean_ride_length = mean(ride_length),
+    max_ride_length = max(ride_length),
+    mode_day_of_week = Mode(day_of_week),
+    count_of_trips = n())
+write_csv(analysis_df, "2023-divvy-analysis_df.csv")
+```
+
+
+### Total number of trips by biketype
+```{r}
+biketype_trip_count <- biketrip_final %>%
+  group_by(member_casual, rideable_type) %>% 
+  summarize(count_of_trips = n())
+write_csv(biketype_trip_count, "2023-divvy-biketype_trip_count.csv")
+```
+
+
+### Station summary: member/casual
+```{r}
+station_analysis <- biketrip_final %>% 
+  mutate(station = start_station_name) %>%
+  group_by(start_station_name, member_casual) %>%  
+  summarize(count_of_trips = n()) %>%    
+  arrange(desc(count_of_trips))
+write_csv(station_analysis, "2023-divvy-station_analysis.csv")
+```
+
+
+### Ride length: month
+```{r}
+ridelength_month <- biketrip_final %>%
+  mutate(month_name = month.name[month]) %>% 
+  mutate(month_name = factor(month_name, levels = c("January", "February", "March", "April", "May", "June"))) %>%
+  group_by(member_casual, month_name) %>%
+  summarize(
+    mean_ride_length = mean(ride_length),
+    count_of_trips = n()) %>% 
+  mutate(mean_minutes = minute(seconds_to_period(mean_ride_length)))
+write_csv(ridelength_month, "2023-divvy-ridelength_month.csv")
+```
+
+
+### Ride length: day of week
+```{r}
+ridelength_day_of_week <- biketrip_final %>%
+  mutate(day_of_week = factor(day_of_week, levels = c("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"))) %>%
+  group_by(member_casual, day_of_week) %>%
+  summarize(
+    mean_ride_length = mean(ride_length),
+    count_of_trips = n()) %>% 
+  mutate(mean_minutes = minute(seconds_to_period(mean_ride_length)))
+write_csv(ridelength_day_of_week, "2023-divvy-ridelength_day_of_week.csv")
+```
+
+
+# The following visualizations were not used. Instead, they were later replaced with Tableau visualizations.
+
+
+### Visualize the number of rides by type of rider grouped by weeks
+```{r}
+ridelength_day_of_week %>% 
+  arrange(day_of_week) %>% 
+  mutate(day_of_week = factor(day_of_week, levels = c("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"))) %>%
+  ggplot(aes(x = day_of_week, y = count_of_trips, color = member_casual, group = member_casual)) +
+  geom_point() + 
+  geom_line()
+```
+
+
+### Visualize the totalnumber of rides by type of rider grouped by month
+```{r}
+ridelength_month %>% 
+  arrange(month_name) %>% 
+  mutate(month_name = factor(month_name, levels = c("January", "February", "March", "April", "May", "June"))) %>%
+  ggplot(aes(x = month_name, y = count_of_trips, group = member_casual, color = member_casual)) +
+  geom_point() +
+  geom_line()
+```
